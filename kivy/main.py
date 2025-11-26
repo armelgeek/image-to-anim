@@ -60,6 +60,7 @@ class DlImg2SktchApp(MDApp):
     is_cv2_running = ObjectProperty()
     animation_mode = StringProperty("Video")  # "Video" or "SVG Live"
     kivg_instance = ObjectProperty(None)  # Kivg instance for SVG animation
+    is_svg_file = ObjectProperty(False)  # Track if uploaded file is SVG
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -135,7 +136,7 @@ class DlImg2SktchApp(MDApp):
         self.img_file_manager = MDFileManager(
             exit_manager=self.img_file_exit_manager,
             select_path=self.select_img_path,
-            ext=[".png", ".jpg", ".jpeg", ".webp"],  # Restrict to image files
+            ext=[".png", ".jpg", ".jpeg", ".webp", ".svg"],  # Added SVG support
             selector="file",  # Restrict to selecting files only
             preview=True,
             #show_hidden_files=True,
@@ -250,34 +251,70 @@ class DlImg2SktchApp(MDApp):
 
     def select_img_path(self, path: str):
         self.image_path = path
-        api_resp = get_split_lens(path)
-        split_lens = api_resp["split_lens"]
-        image_details = api_resp["image_res"]
-        img_box = self.root.ids.img_selector_lbl
-        img_box.text = f"{image_details}"
-        menu_items = [
-            {
-                "text": f"{option}",
-                "on_release": lambda x=f"{option}": self.set_split_len(x),
-                "font_size": sp(24)
-            } for option in split_lens
-        ]
-        self.split_len_options = MDDropdownMenu(
-            md_bg_color="#bdc6b0",
-            caller=self.split_len_drp,
-            items=menu_items,
-        )
-        if len(split_lens) >= 1:
-            if 10 in split_lens:
-                self.split_len = 10
-            else:
-                self.split_len = split_lens[0]
+        
+        # Check if the file is an SVG
+        if path.lower().endswith('.svg'):
+            self.is_svg_file = True
+            # For SVG files, show file info and skip split_lens calculation
+            import os
+            filename = os.path.basename(path)
+            file_size = os.path.getsize(path)
+            img_box = self.root.ids.img_selector_lbl
+            img_box.text = f"{filename} (SVG, {file_size} bytes)"
+            
+            # For SVG, we don't need split_len options
+            self.split_len_options = MDDropdownMenu(
+                md_bg_color="#bdc6b0",
+                caller=self.split_len_drp,
+                items=[],
+            )
+            self.split_len_drp.text = "N/A"
+            
+            self.show_toast_msg(f"Selected SVG file: {filename}")
+            self.img_file_exit_manager()
+            
+            # Auto-switch to SVG Live mode if an SVG is uploaded
+            try:
+                segmented_control = self.root.ids.animation_mode
+                for item in segmented_control.children:
+                    if hasattr(item, 'text') and item.text == "SVG Live":
+                        item.active = True
+                        self.animation_mode = "SVG Live"
+                        self.show_toast_msg("Switched to SVG Live mode")
+                        break
+            except Exception as e:
+                print(f"Error switching mode: {e}")
         else:
-            self.split_len = 1
-        self.split_len_drp.text = str(self.split_len)
-        print(f"Initial split len: {self.split_len}")
-        self.show_toast_msg(f"Selected image: {path}")
-        self.img_file_exit_manager()
+            # Regular image file
+            self.is_svg_file = False
+            api_resp = get_split_lens(path)
+            split_lens = api_resp["split_lens"]
+            image_details = api_resp["image_res"]
+            img_box = self.root.ids.img_selector_lbl
+            img_box.text = f"{image_details}"
+            menu_items = [
+                {
+                    "text": f"{option}",
+                    "on_release": lambda x=f"{option}": self.set_split_len(x),
+                    "font_size": sp(24)
+                } for option in split_lens
+            ]
+            self.split_len_options = MDDropdownMenu(
+                md_bg_color="#bdc6b0",
+                caller=self.split_len_drp,
+                items=menu_items,
+            )
+            if len(split_lens) >= 1:
+                if 10 in split_lens:
+                    self.split_len = 10
+                else:
+                    self.split_len = split_lens[0]
+            else:
+                self.split_len = 1
+            self.split_len_drp.text = str(self.split_len)
+            print(f"Initial split len: {self.split_len}")
+            self.show_toast_msg(f"Selected image: {path}")
+            self.img_file_exit_manager()
 
     def select_vid_path(self, path: str):
         """
@@ -330,6 +367,21 @@ class DlImg2SktchApp(MDApp):
             self.show_toast_msg("Please wait for the previous request to finish", is_error=True)
             return
         
+        # Check if SVG file is being used with Video mode
+        if self.is_svg_file and self.animation_mode == "Video":
+            self.show_toast_msg("SVG files can only be used in SVG Live mode. Switching mode...", is_error=True)
+            # Auto-switch to SVG Live mode
+            try:
+                segmented_control = self.root.ids.animation_mode
+                for item in segmented_control.children:
+                    if hasattr(item, 'text') and item.text == "SVG Live":
+                        item.active = True
+                        self.animation_mode = "SVG Live"
+                        break
+            except Exception as e:
+                print(f"Error switching mode: {e}")
+            return
+        
         # Check animation mode
         if self.animation_mode == "SVG Live":
             self.submit_svg_animation()
@@ -361,10 +413,7 @@ class DlImg2SktchApp(MDApp):
         import datetime
         
         try:
-            # Get parameters
-            split_len = self.split_len
-            
-            # Show spinner while generating SVG
+            # Show spinner while preparing animation
             player_box = self.root.ids.player_box
             player_box.clear_widgets()
             spinner = MDSpinner(
@@ -375,17 +424,29 @@ class DlImg2SktchApp(MDApp):
             )
             player_box.add_widget(spinner)
             
-            # Generate SVG in a thread
-            svg_thread = Thread(
-                target=self._generate_and_animate_svg, 
-                args=(self.image_path, split_len, player_box),
-                daemon=True
-            )
-            svg_thread.start()
-            self.is_cv2_running = True
+            # Check if it's already an SVG file
+            if self.is_svg_file:
+                # Direct SVG file - animate it directly
+                from kivy.clock import Clock
+                Clock.schedule_once(lambda dt: self._start_svg_animation(self.image_path, player_box), 0)
+                self.show_toast_msg("Loading SVG animation...")
+            else:
+                # Image file - generate SVG first
+                split_len = self.split_len
+                
+                # Generate SVG in a thread
+                svg_thread = Thread(
+                    target=self._generate_and_animate_svg, 
+                    args=(self.image_path, split_len, player_box),
+                    daemon=True
+                )
+                svg_thread.start()
+                self.is_cv2_running = True
             
         except Exception as e:
             print(f"Error in SVG animation: {e}")
+            import traceback
+            traceback.print_exc()
             self.show_toast_msg(f"Error: {e}", is_error=True)
 
     def _generate_and_animate_svg(self, image_path, split_len, player_box):
@@ -494,6 +555,7 @@ class DlImg2SktchApp(MDApp):
         main_img_duration = self.root.ids.main_img_duration
         # start reset
         self.image_path = ""
+        self.is_svg_file = False
         self.split_len = 10
         menu_items = []
         self.split_len_options = MDDropdownMenu(
@@ -502,7 +564,7 @@ class DlImg2SktchApp(MDApp):
             items=menu_items,
         )
         self.split_len_drp.text = "speed"
-        img_selector_lbl.text = "Select an image file >"
+        img_selector_lbl.text = "Select an image or SVG file >"
         frame_rate.text = "25"
         obj_skip_rate.text = "8"
         bck_skip_rate.text = "14"
