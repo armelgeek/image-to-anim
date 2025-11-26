@@ -5,6 +5,14 @@
 
 ## Change Details
 
+### 0.3.0 ✨ NEW - SVG Animation Mode
+- Added **SVG Live** animation mode using kivg library
+- Real-time SVG animation with animated drawing hand
+- Combines kivg SVG tracking with image-to-animation sketch generation
+- Uses same tracing algorithm for consistency across both modes
+- UI segmented control to switch between Video and SVG Live modes
+- See [SVG Animation Documentation](./docs/SVG_ANIMATION.md) for details
+
 ### 0.2.2
 - Now we can select image from android phone memory's DCIM, Downloads or Pictures (sub-folder under this also works fine).
 - All logics remain same, so no change on desktop apps.
