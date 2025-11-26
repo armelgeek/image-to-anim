@@ -138,7 +138,7 @@ class DlImg2SktchApp(MDApp):
             select_path=self.select_img_path,
             ext=[".png", ".jpg", ".jpeg", ".webp", ".svg"],  # Added SVG support
             selector="file",  # Restrict to selecting files only
-            preview=True,
+            preview=False,  # Disabled preview to allow SVG and WebP files (preview mode only supports png/jpg/jpeg)
             #show_hidden_files=True,
         )
         self.is_vid_manager_open = False
