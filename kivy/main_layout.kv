@@ -3,6 +3,8 @@
 #:import MDLabel kivymd.uix.label.MDLabel
 #:import MDTextField kivymd.uix.textfield.MDTextField
 #:import MDFillRoundFlatIconButton kivymd.uix.button.MDFillRoundFlatIconButton
+#:import MDSegmentedControl kivymd.uix.segmentedcontrol.MDSegmentedControl
+#:import MDSegmentedControlItem kivymd.uix.segmentedcontrol.MDSegmentedControlItem
 
 #:import dp kivy.metrics.dp
 #:import sp kivy.metrics.sp
@@ -30,7 +32,7 @@ MDScreen:
 
             MDLabel:
                 id: img_selector_lbl
-                text: "Select an image file >"
+                text: "Select an image or SVG file >"
                 size_hint_y: None
                 height: self.texture_size[1]
                 size_hint_x: 0.7
@@ -59,6 +61,32 @@ MDScreen:
             padding: 2, 10, 2, 10 # left, top, right, bottom
 
             # video player will be added under this box from main program
+
+        MyMDDivider:
+            color: (0, 0, 0, 0.25)
+
+        MDGridLayout: # animation mode selector
+            cols: 2
+            size_hint_y: 0.08
+            padding: 8, 5, 8, 5
+            spacing: dp(4)
+
+            MDLabel:
+                text: "Animation Mode:"
+                font_style: 'Body1'
+                size_hint_x: 0.4
+
+            MDSegmentedControl:
+                id: animation_mode
+                size_hint_x: 0.6
+                on_active: app.on_animation_mode_change()
+
+                MDSegmentedControlItem:
+                    text: "Video"
+                    active: True
+
+                MDSegmentedControlItem:
+                    text: "SVG Live"
 
         MyMDDivider:
             color: (0, 0, 0, 0.25)

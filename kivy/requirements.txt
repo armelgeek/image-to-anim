@@ -4,3 +4,5 @@ numpy
 opencv-python
 ffpyplayer
 av
+svg.path
+fonttools
