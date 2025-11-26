@@ -28,8 +28,7 @@ Window.softinput_mode = "below_target"
 
 # Import your local screen classes & modules
 from screens.divider import MyMDDivider
-from sketchApi import get_split_lens, initiate_sketch
-from svgGenerator import generate_svg_from_image, save_svg_file
+from sketchApi import get_split_lens, initiate_sketch, generate_svg_from_image_sketch
 from kivg import Kivg
 
 ## Global definitions
@@ -358,18 +357,10 @@ class DlImg2SktchApp(MDApp):
 
     def submit_svg_animation(self):
         """SVG-based live animation using kivg"""
-        import cv2
         from kivy.uix.widget import Widget
-        from kivy.graphics import Color, Rectangle
         import datetime
         
         try:
-            # Read the image
-            image_bgr = cv2.imread(self.image_path)
-            if image_bgr is None:
-                self.show_toast_msg("Error reading image", is_error=True)
-                return
-            
             # Get parameters
             split_len = self.split_len
             
@@ -387,7 +378,7 @@ class DlImg2SktchApp(MDApp):
             # Generate SVG in a thread
             svg_thread = Thread(
                 target=self._generate_and_animate_svg, 
-                args=(image_bgr, split_len, player_box),
+                args=(self.image_path, split_len, player_box),
                 daemon=True
             )
             svg_thread.start()
@@ -397,42 +388,38 @@ class DlImg2SktchApp(MDApp):
             print(f"Error in SVG animation: {e}")
             self.show_toast_msg(f"Error: {e}", is_error=True)
 
-    def _generate_and_animate_svg(self, image_bgr, split_len, player_box):
+    def _generate_and_animate_svg(self, image_path, split_len, player_box):
         """Generate SVG and schedule animation on main thread"""
-        import cv2
         import datetime
         from kivy.clock import Clock
         
         try:
-            # Calculate resize dimensions
-            from sketchApi import find_nearest_res
-            img_ht, img_wd = image_bgr.shape[0], image_bgr.shape[1]
-            aspect_ratio = img_wd / img_ht
-            img_ht = find_nearest_res(img_ht)
-            new_aspect_wd = int(img_ht * aspect_ratio)
-            img_wd = find_nearest_res(new_aspect_wd)
-            
-            # Generate SVG
-            svg_string = generate_svg_from_image(
-                image_bgr, 
-                split_len=split_len,
-                resize_wd=img_wd,
-                resize_ht=img_ht
-            )
-            
-            # Save SVG to temp file
+            # Generate SVG file path
             now = datetime.datetime.now()
             current_time = str(now.strftime("%H%M%S"))
             current_date = str(now.strftime("%Y%m%d"))
             svg_filename = f"sketch_{current_date}_{current_time}.svg"
             svg_path = os.path.join(self.video_dir, svg_filename)
-            save_svg_file(svg_string, svg_path)
             
-            # Schedule animation on main thread
-            Clock.schedule_once(lambda dt: self._start_svg_animation(svg_path, player_box), 0)
+            # Generate SVG using sketchApi (which uses the same algorithm as video generation)
+            result = generate_svg_from_image_sketch(
+                image_path=image_path,
+                split_len=split_len,
+                output_path=svg_path
+            )
+            
+            if result["status"]:
+                # Schedule animation on main thread
+                Clock.schedule_once(lambda dt: self._start_svg_animation(svg_path, player_box), 0)
+            else:
+                # Show error
+                Clock.schedule_once(lambda dt: self.show_toast_msg(result["message"], is_error=True), 0)
+                Clock.schedule_once(lambda dt: setattr(self, 'is_cv2_running', False), 0)
             
         except Exception as e:
             print(f"Error generating SVG: {e}")
+            import traceback
+            traceback.print_exc()
             Clock.schedule_once(lambda dt: self.show_toast_msg(f"Error: {e}", is_error=True), 0)
             Clock.schedule_once(lambda dt: setattr(self, 'is_cv2_running', False), 0)
 

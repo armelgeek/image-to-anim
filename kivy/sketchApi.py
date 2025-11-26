@@ -538,4 +538,65 @@ def get_split_lens(image_path):
         print(f"Error while getting split len: {e}")
     return final_return # list of split length
 
+
+def generate_svg_from_image_sketch(image_path, split_len=10, output_path=None):
+    """
+    Generate an SVG file from an image using the same sketch algorithm.
+    This integrates with kivg for SVG animation.
+    
+    Args:
+        image_path: Path to the input image
+        split_len: Grid size for tracing (should match the animation speed)
+        output_path: Optional output path for the SVG file
+        
+    Returns:
+        dict with 'status' (bool), 'message' (str with path or error), 'svg_string' (str)
+    """
+    from svgGenerator import generate_svg_from_image, save_svg_file
+    
+    result = {"status": False, "message": "", "svg_string": ""}
+    
+    try:
+        # Read and process image
+        image_bgr = cv2.imread(image_path)
+        if image_bgr is None:
+            result["message"] = f"Failed to read image: {image_path}"
+            return result
+        
+        # Calculate resize dimensions using the same logic as video generation
+        img_ht, img_wd = image_bgr.shape[0], image_bgr.shape[1]
+        aspect_ratio = img_wd / img_ht
+        img_ht = find_nearest_res(img_ht)
+        new_aspect_wd = int(img_ht * aspect_ratio)
+        img_wd = find_nearest_res(new_aspect_wd)
+        
+        # Generate SVG
+        svg_string = generate_svg_from_image(
+            image_bgr,
+            split_len=split_len,
+            stroke_color="#000000",
+            stroke_width=2,
+            resize_wd=img_wd,
+            resize_ht=img_ht
+        )
+        
+        result["svg_string"] = svg_string
+        
+        # Save to file if output path is provided
+        if output_path:
+            save_svg_file(svg_string, output_path)
+            result["message"] = output_path
+        else:
+            result["message"] = "SVG generated successfully"
+        
+        result["status"] = True
+        
+    except Exception as e:
+        result["message"] = f"Error generating SVG: {e}"
+        print(result["message"])
+        import traceback
+        traceback.print_exc()
+    
+    return result
+
 # End

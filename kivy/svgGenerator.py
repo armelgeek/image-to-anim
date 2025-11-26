@@ -16,9 +16,16 @@ def prettify_xml(elem):
     return reparsed.toprettyxml(indent="  ")
 
 
+def euc_dist(arr1, point):
+    """Calculate Euclidean distance from array of points to a single point"""
+    square_sub = (arr1 - point) ** 2
+    return np.sqrt(np.sum(square_sub, axis=1))
+
+
 def trace_image_to_svg_paths(img_thresh, resize_wd, resize_ht, split_len, object_mask=None, stroke_color="#000000", stroke_width=2):
     """
     Convert the thresholded image to SVG paths by tracing the black pixels.
+    Uses the same algorithm as sketchApi for consistency.
     
     Args:
         img_thresh: Thresholded grayscale image
@@ -30,7 +37,7 @@ def trace_image_to_svg_paths(img_thresh, resize_wd, resize_ht, split_len, object
         stroke_width: Width of the SVG strokes
         
     Returns:
-        List of SVG path commands
+        List of SVG path commands as (x, y) tuples
     """
     img_thresh_copy = img_thresh.copy()
     
@@ -39,7 +46,7 @@ def trace_image_to_svg_paths(img_thresh, resize_wd, resize_ht, split_len, object
         object_mask_black_ind = np.where(object_mask == 0)
         img_thresh_copy[object_mask_black_ind] = 255
     
-    # Cut the image into grids
+    # Cut the image into grids (same as sketchApi)
     n_cuts_vertical = int(np.ceil(resize_ht / split_len))
     n_cuts_horizontal = int(np.ceil(resize_wd / split_len))
     
@@ -52,38 +59,35 @@ def trace_image_to_svg_paths(img_thresh, resize_wd, resize_ht, split_len, object
     cut_having_black = np.sum(np.sum(cut_having_black, axis=-1), axis=-1)
     cut_black_indices = np.array(np.where(cut_having_black > 0)).T
     
-    # Create path points by following the nearest neighbor
+    # Create path points by following the nearest neighbor (same as sketchApi algorithm)
     path_points = []
     if len(cut_black_indices) > 0:
-        visited = set()
-        current_idx = 0
+        selected_ind = 0
         
-        while len(visited) < len(cut_black_indices):
-            if current_idx in visited:
-                # Find next unvisited point
-                for i in range(len(cut_black_indices)):
-                    if i not in visited:
-                        current_idx = i
-                        break
-                else:
-                    break
-            
-            visited.add(current_idx)
-            point = cut_black_indices[current_idx]
+        while len(cut_black_indices) > 1:
+            selected_ind_val = cut_black_indices[selected_ind].copy()
             
             # Convert grid coordinates to pixel coordinates (center of grid)
-            x = point[1] * split_len + split_len // 2
-            y = point[0] * split_len + split_len // 2
+            x = selected_ind_val[1] * split_len + split_len // 2
+            y = selected_ind_val[0] * split_len + split_len // 2
             path_points.append((x, y))
             
-            # Find nearest unvisited neighbor
-            if len(visited) < len(cut_black_indices):
-                unvisited_indices = [i for i in range(len(cut_black_indices)) if i not in visited]
-                if unvisited_indices:
-                    unvisited_points = cut_black_indices[unvisited_indices]
-                    distances = np.sqrt(np.sum((unvisited_points - point) ** 2, axis=1))
-                    nearest_idx = unvisited_indices[np.argmin(distances)]
-                    current_idx = nearest_idx
+            # Delete the selected index from the array
+            cut_black_indices[selected_ind] = cut_black_indices[-1]
+            cut_black_indices = cut_black_indices[:-1]
+            
+            del selected_ind
+            
+            # Select the next nearest index using Euclidean distance
+            if len(cut_black_indices) > 0:
+                euc_arr = euc_dist(cut_black_indices, selected_ind_val)
+                selected_ind = np.argmin(euc_arr)
+        
+        # Add the last point
+        if len(cut_black_indices) == 1:
+            x = cut_black_indices[0][1] * split_len + split_len // 2
+            y = cut_black_indices[0][0] * split_len + split_len // 2
+            path_points.append((x, y))
     
     return path_points
 
