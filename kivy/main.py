@@ -250,15 +250,39 @@ class DlImg2SktchApp(MDApp):
             self.show_toast_msg(f"Error: {e}", is_error=True)
 
     def select_img_path(self, path: str):
+        """Handle image/SVG file selection with validation"""
+        import os
+        
+        # Validate file exists and is a regular file
+        if not os.path.exists(path):
+            self.show_toast_msg("File does not exist", is_error=True)
+            return
+        
+        if not os.path.isfile(path):
+            self.show_toast_msg("Path is not a file", is_error=True)
+            return
+        
+        # Validate file extension
+        valid_extensions = ['.png', '.jpg', '.jpeg', '.webp', '.svg']
+        file_ext = os.path.splitext(path)[1].lower()
+        if file_ext not in valid_extensions:
+            self.show_toast_msg(f"Unsupported file type: {file_ext}", is_error=True)
+            return
+        
+        # Validate file size (max 50MB)
+        max_size = 50 * 1024 * 1024  # 50MB
+        file_size = os.path.getsize(path)
+        if file_size > max_size:
+            self.show_toast_msg("File too large (max 50MB)", is_error=True)
+            return
+        
         self.image_path = path
         
         # Check if the file is an SVG
         if path.lower().endswith('.svg'):
             self.is_svg_file = True
             # For SVG files, show file info and skip split_lens calculation
-            import os
             filename = os.path.basename(path)
-            file_size = os.path.getsize(path)
             img_box = self.root.ids.img_selector_lbl
             img_box.text = f"{filename} (SVG, {file_size} bytes)"
             
@@ -485,11 +509,43 @@ class DlImg2SktchApp(MDApp):
             Clock.schedule_once(lambda dt: setattr(self, 'is_cv2_running', False), 0)
 
     def _start_svg_animation(self, svg_path, player_box):
-        """Start SVG animation on the main thread"""
+        """Start SVG animation on the main thread with validation"""
         from kivy.uix.widget import Widget
-        from kivy.graphics import Color, Rectangle
+        import os
         
         try:
+            # Validate SVG file before animation
+            if not os.path.exists(svg_path):
+                self.show_toast_msg("SVG file not found", is_error=True)
+                self.is_cv2_running = False
+                return
+            
+            if not os.path.isfile(svg_path):
+                self.show_toast_msg("Invalid SVG path", is_error=True)
+                self.is_cv2_running = False
+                return
+            
+            # Validate file size (max 10MB for SVG to prevent resource exhaustion)
+            max_svg_size = 10 * 1024 * 1024  # 10MB
+            svg_size = os.path.getsize(svg_path)
+            if svg_size > max_svg_size:
+                self.show_toast_msg("SVG file too large for animation (max 10MB)", is_error=True)
+                self.is_cv2_running = False
+                return
+            
+            # Basic SVG content validation
+            try:
+                with open(svg_path, 'r', encoding='utf-8') as f:
+                    content = f.read(1024)  # Read first 1KB
+                    if not content.strip().startswith('<?xml') and '<svg' not in content:
+                        self.show_toast_msg("Invalid SVG file format", is_error=True)
+                        self.is_cv2_running = False
+                        return
+            except Exception as e:
+                self.show_toast_msg(f"Error reading SVG: {e}", is_error=True)
+                self.is_cv2_running = False
+                return
+            
             # Clear player box
             player_box.clear_widgets()
             

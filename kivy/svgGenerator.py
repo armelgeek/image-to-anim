@@ -76,8 +76,6 @@ def trace_image_to_svg_paths(img_thresh, resize_wd, resize_ht, split_len, object
             cut_black_indices[selected_ind] = cut_black_indices[-1]
             cut_black_indices = cut_black_indices[:-1]
             
-            del selected_ind
-            
             # Select the next nearest index using Euclidean distance
             if len(cut_black_indices) > 0:
                 euc_arr = euc_dist(cut_black_indices, selected_ind_val)
